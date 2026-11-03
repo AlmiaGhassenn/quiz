@@ -1,1 +1,296 @@
 
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La gestion du temps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one centered column, a single "card" per screen; the timer bar is the only bold element. */
+:root {
+  --bg: #eef1f6;
+  --surface: #ffffff;
+  --fg: #18202e;
+  --muted: #5a6577;
+  --line: #d5dbe5;
+  --accent: #2c4bd1;
+  --accent-fg: #ffffff;
+  --ok: #1d8a4e;
+  --warn: #c98a06;
+  --bad: #c8372d;
+  --ok-soft: #e3f4ea;
+  --bad-soft: #fbe6e4;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10141c; --surface: #19202c; --fg: #e8ecf3; --muted: #9aa5b8; --line: #2c3545;
+    --accent: #7d97ff; --accent-fg: #0d1220; --ok: #4cc584; --warn: #f0b429; --bad: #ff6b5e;
+    --ok-soft: #173326; --bad-soft: #3a1c1a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10141c; --surface: #19202c; --fg: #e8ecf3; --muted: #9aa5b8; --line: #2c3545;
+  --accent: #7d97ff; --accent-fg: #0d1220; --ok: #4cc584; --warn: #f0b429; --bad: #ff6b5e;
+  --ok-soft: #173326; --bad-soft: #3a1c1a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.5;
+  padding-block: 32px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 640px; margin: 0 auto; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: clamp(20px, 5vw, 36px); display: flex; flex-direction: column; gap: 20px;
+}
+h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(32px, 7vw, 46px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: clamp(21px, 4.4vw, 26px); font-weight: 500; }
+.eyebrow { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+p { margin: 0; }
+.lead { color: var(--muted); max-width: 52ch; }
+.rules { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 15px; padding: 0; margin: 0; list-style: none; }
+.rules b { color: var(--fg); font-family: var(--font-mono); }
+label { font-weight: 700; font-size: 15px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+input[type="text"] {
+  font: inherit; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); width: 100%;
+}
+input[type="text"]:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.hint { font-size: 14px; color: var(--bad); min-height: 1.4em; }
+button { font: inherit; cursor: pointer; }
+.btn {
+  background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 10px;
+  padding: 13px 22px; font-weight: 700; align-self: flex-start;
+}
+.btn:focus-visible, .opt:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Question screen */
+.qhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.count { font-family: var(--font-mono); font-weight: 700; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.clock { font-family: var(--font-mono); font-weight: 700; font-size: 28px; font-variant-numeric: tabular-nums; color: var(--tcolor, var(--ok)); }
+.clock small { font-size: 15px; color: var(--muted); font-weight: 500; }
+.bar { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 100%; background: var(--tcolor, var(--ok)); transform-origin: left; border-radius: 99px; }
+.opts { display: grid; gap: 10px; }
+.opt {
+  text-align: left; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); display: flex; gap: 12px; align-items: flex-start;
+}
+.opt:hover:not(:disabled) { border-color: var(--accent); }
+.opt:disabled { cursor: default; }
+.opt .k { font-family: var(--font-mono); font-weight: 700; color: var(--muted); flex: none; }
+.opt.picked { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.opt.picked .k { color: var(--accent-fg); }
+.progress { display: flex; gap: 4px; }
+.progress span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.progress span.done { background: var(--accent); }
+
+/* Results */
+.score { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.score b { font-family: var(--font-display); font-size: clamp(56px, 14vw, 80px); line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
+.score span { color: var(--muted); font-size: 20px; }
+.review { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.review li { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.mark { grid-row: span 3; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+.mark.ok { background: var(--ok-soft); color: var(--ok); }
+.mark.bad { background: var(--bad-soft); color: var(--bad); }
+.review .q { font-weight: 700; min-width: 0; }
+.review .a { font-size: 15px; color: var(--muted); min-width: 0; }
+.review .a strong { color: var(--fg); }
+.review .a.wrong strong { color: var(--bad); }
+.review .a.right strong { color: var(--ok); }
+.note { font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none !important; } }
+</style>
+
+<main>
+  <!-- Accueil -->
+  <section class="card" id="home">
+    <div class="eyebrow">Quiz · 10 questions</div>
+    <h1>La gestion du temps</h1>
+    <p class="lead">De Benjamin Franklin à l'organisation de votre journée : priorités, planning, pauses et sommeil. Répondez vite : le chrono n'attend pas.</p>
+    <ul class="rules">
+      <li><b>10</b> questions</li>
+      <li><b>10 s</b> par question</li>
+      <li>Sans réponse = <b>0</b> point</li>
+    </ul>
+    <form id="startForm" class="field" novalidate>
+      <label for="name">Votre nom</label>
+      <input type="text" id="name" autocomplete="name" maxlength="40" placeholder="Ex. : Sarah Ben Ali">
+      <div class="hint" id="nameHint" aria-live="polite"></div>
+      <button class="btn" type="submit">Commencer</button>
+    </form>
+  </section>
+
+  <!-- Question -->
+  <section class="card" id="quiz" hidden>
+    <div class="progress" id="progress" aria-hidden="true"></div>
+    <div class="qhead">
+      <span class="count" id="count">1/10</span>
+      <span class="clock" id="clock" aria-live="off">10<small> s</small></span>
+    </div>
+    <div class="bar" role="progressbar" aria-label="Temps restant" aria-valuemin="0" aria-valuemax="10" id="barWrap"><i id="bar"></i></div>
+    <h2 id="qtext"></h2>
+    <div class="opts" id="opts"></div>
+  </section>
+
+  <!-- Résultats -->
+  <section class="card" id="results" hidden>
+    <div class="eyebrow" id="who"></div>
+    <div class="score"><b id="scoreNum">0</b><span>/ 10</span></div>
+    <p class="lead" id="verdict"></p>
+    <h2>Correction</h2>
+    <ul class="review" id="review"></ul>
+    <button class="btn" id="restart" type="button">Recommencer</button>
+  </section>
+</main>
+
+<script>
+// ===== Questions : remplacez ce bloc par vos 10 questions. =====
+// "correct" = index de la bonne réponse dans "options" (0 = première).
+// L'ordre des réponses est mélangé pour chaque participant.
+const QUESTIONS = [
+  { q: "Qui était Benjamin Franklin ?",
+    options: ["Un homme politique, scientifique, écrivain et inventeur.", "Un sportif et acteur.", "Un médecin et professeur.", "Un ingénieur et musicien."], correct: 0 },
+  { q: "Quelles sont les dates de naissance et de décès de Benjamin Franklin ?",
+    options: ["1606–1690", "1706–1790", "1710–1800", "1750–1830"], correct: 1 },
+  { q: "Que signifie l'expression « Le temps, c'est de l'argent » ?",
+    options: ["Le temps est une ressource précieuse.", "Il faut travailler sans repos.", "L'argent permet d'arrêter le temps.", "Le temps est moins important que l'argent."], correct: 0 },
+  { q: "Quel est l'objectif principal de la gestion du temps ?",
+    options: ["Perdre moins de temps.", "Augmenter les distractions.", "Reporter les tâches.", "Travailler sans organisation."], correct: 0 },
+  { q: "Pourquoi faut-il fixer ses priorités ?",
+    options: ["Pour commencer par les tâches les plus importantes.", "Pour faire toutes les tâches en même temps.", "Pour éviter de planifier.", "Pour reporter les tâches difficiles."], correct: 0 },
+  { q: "À quoi sert un planning ?",
+    options: ["À organiser les tâches dans le temps.", "À supprimer les pauses.", "À éviter les responsabilités.", "À remplacer les objectifs."], correct: 0 },
+  { q: "Pourquoi faut-il donner un temps à chaque tâche ?",
+    options: ["Pour mieux organiser sa journée.", "Pour perdre du temps.", "Pour éviter les délais.", "Pour augmenter le stress."], correct: 0 },
+  { q: "Quel comportement permet d'améliorer la gestion du temps ?",
+    options: ["Éviter les distractions.", "Consulter constamment son téléphone.", "Reporter les tâches importantes.", "Faire plusieurs choses sans organisation."], correct: 0 },
+  { q: "Les pauses sont-elles importantes dans la gestion du temps ?",
+    options: ["Oui, elles permettent de récupérer et de rester concentré.", "Non, elles représentent toujours une perte de temps.", "Oui, mais seulement le week-end.", "Non, il faut travailler sans interruption."], correct: 0 },
+  { q: "Pourquoi faut-il garder du temps pour dormir ?",
+    options: ["Pour préserver son énergie et sa concentration.", "Pour éviter de faire un planning.", "Pour supprimer les pauses.", "Pour reporter les tâches."], correct: 0 },
+];
+const SECONDS = 10;
+// ===============================================================
+
+const $ = (id) => document.getElementById(id);
+const LETTERS = ["A", "B", "C", "D"];
+let state = null, timerId = null, deadline = 0, locked = false;
+
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function show(id) { ["home", "quiz", "results"].forEach(s => $(s).hidden = s !== id); window.scrollTo(0, 0); }
+
+$("startForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("name").value.trim();
+  if (!name) { $("nameHint").textContent = "Entrez votre nom pour commencer."; $("name").focus(); return; }
+  $("nameHint").textContent = "";
+  start(name);
+});
+$("restart").addEventListener("click", () => { show("home"); $("name").focus(); });
+
+function start(name) {
+  state = {
+    name, index: 0,
+    // Each question gets its own shuffled option order for this participant.
+    items: QUESTIONS.map(item => ({ ...item, order: shuffle(item.options.map((_, i) => i)) })),
+    answers: [], // original option index, or null when time ran out
+  };
+  $("progress").innerHTML = QUESTIONS.map(() => "<span></span>").join("");
+  show("quiz");
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const item = state.items[state.index];
+  locked = false;
+  $("count").textContent = `${state.index + 1}/${QUESTIONS.length}`;
+  [...$("progress").children].forEach((s, i) => s.classList.toggle("done", i < state.index));
+  $("qtext").textContent = item.q;
+  const opts = $("opts"); opts.innerHTML = "";
+  item.order.forEach((orig, pos) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "opt"; b.id = `opt-${pos}`;
+    b.innerHTML = `<span class="k">${LETTERS[pos]}</span><span></span>`;
+    b.lastChild.textContent = item.options[orig];
+    b.addEventListener("click", () => answer(orig, b));
+    opts.appendChild(b);
+  });
+  startTimer();
+}
+
+function startTimer() {
+  clearInterval(timerId);
+  deadline = performance.now() + SECONDS * 1000;
+  tick();
+  timerId = setInterval(tick, 100);
+}
+
+function tick() {
+  const left = Math.max(0, deadline - performance.now());
+  const secs = Math.ceil(left / 1000);
+  const frac = left / (SECONDS * 1000);
+  const color = frac > 0.5 ? "var(--ok)" : frac > 0.25 ? "var(--warn)" : "var(--bad)";
+  $("quiz").style.setProperty("--tcolor", color);
+  $("clock").innerHTML = `${secs}<small> s</small>`;
+  $("bar").style.transform = `scaleX(${frac})`;
+  $("barWrap").setAttribute("aria-valuenow", secs);
+  if (left <= 0) answer(null, null);
+}
+
+function answer(orig, btn) {
+  if (locked) return; // blocks double-clicks and a click racing the timeout
+  locked = true;
+  clearInterval(timerId);
+  state.answers[state.index] = orig;
+  [...$("opts").children].forEach(b => b.disabled = true);
+  if (btn) btn.classList.add("picked");
+  setTimeout(next, btn ? 450 : 250);
+}
+
+function next() {
+  state.index++;
+  if (state.index < QUESTIONS.length) renderQuestion();
+  else renderResults();
+}
+
+function renderResults() {
+  const score = state.items.reduce((n, it, i) => n + (state.answers[i] === it.correct ? 1 : 0), 0);
+  $("who").textContent = `Résultat de ${state.name}`;
+  $("scoreNum").textContent = score;
+  $("verdict").textContent =
+    score === 10 ? "Sans faute. Vous maîtrisez votre temps." :
+    score >= 7 ? "Très bien. Quelques points à revoir ci-dessous." :
+    score >= 4 ? "Pas mal. La correction vous aidera à progresser." :
+    "Un bon point de départ. Lisez la correction pour progresser.";
+  const list = $("review"); list.innerHTML = "";
+  state.items.forEach((it, i) => {
+    const a = state.answers[i], ok = a === it.correct;
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="mark ${ok ? "ok" : "bad"}" aria-label="${ok ? "Correct" : "Incorrect"}">${ok ? "✓" : "✗"}</span>
+      <span class="q"></span><span class="a ${ok ? "right" : "wrong"}">Votre réponse : <strong></strong></span>`;
+    li.querySelector(".q").textContent = `${i + 1}. ${it.q}`;
+    li.querySelector(".a strong").textContent = a === null ? "Temps écoulé" : it.options[a];
+    if (!ok) {
+      const c = document.createElement("span"); c.className = "a right";
+      c.innerHTML = "Bonne réponse : <strong></strong>";
+      c.querySelector("strong").textContent = it.options[it.correct];
+      li.appendChild(c);
+    }
+    list.appendChild(li);
+  });
+  show("results");
+}
+</script>
